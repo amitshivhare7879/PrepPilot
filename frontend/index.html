@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrepPilot AI | Pro Interview Suite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="text-slate-200 min-h-screen bg-[#0f172a]">
+    <div class="max-w-7xl mx-auto px-6 py-8">
+        
+        <div id="setup-screen" class="max-w-md mx-auto glass p-10 rounded-3xl mt-20 fade-in-up">
+            <div class="flex items-center gap-3 mb-8">
+                <div class="bg-blue-600 p-2 rounded-lg"><i data-lucide="shield-check" class="text-white"></i></div>
+                <h2 class="text-2xl font-bold text-white tracking-tight">Interview Setup</h2>
+            </div>
+            <div class="space-y-5">
+                <div>
+                    <label class="text-[10px] uppercase text-slate-500 font-bold tracking-widest">Target Role</label>
+                    <select id="role-select" class="w-full bg-slate-800/50 border border-slate-700 p-4 rounded-2xl mt-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+                        <option value="Data Scientist">Data Scientist</option>
+                        <option value="ML Engineer">ML Engineer</option>
+                        <option value="Data Analyst">Data Analyst</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[10px] uppercase text-slate-500 font-bold tracking-widest">Difficulty</label>
+                    <select id="level-select" class="w-full bg-slate-800/50 border border-slate-700 p-4 rounded-2xl mt-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+                        <option value="Entry Level">Entry Level</option>
+                        <option value="Mid Level">Mid Level</option>
+                        <option value="Senior">Senior</option>
+                    </select>
+                </div>
+                <button id="start-btn" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 py-4 rounded-2xl font-bold mt-4 shadow-lg shadow-blue-500/20 transition-all transform active:scale-95">
+                    Launch Interview Session
+                </button>
+            </div>
+        </div>
+
+        <div id="interview-room" class="hidden space-y-8 animate-in fade-in zoom-in duration-500">
+            <header class="flex justify-between items-center pb-6 border-b border-slate-800/50">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="cpu" class="text-blue-500 w-8 h-8"></i>
+                    <h1 class="text-2xl font-bold text-white tracking-tighter">Prep<span class="text-blue-500">Pilot</span></h1>
+                </div>
+                <div class="flex items-center gap-4">
+                    <span id="current-role-display" class="text-xs font-bold text-blue-400 bg-blue-500/10 px-4 py-2 rounded-full border border-blue-500/20"></span>
+                    <button id="finish-btn" class="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-4 py-2 rounded-full hover:bg-red-500 hover:text-white transition-all">End Session</button>
+                </div>
+            </header>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div class="lg:col-span-7 space-y-6">
+                    <div class="glass p-8 rounded-3xl border-l-4 border-l-blue-500">
+                        <span class="text-[10px] text-blue-500 font-black uppercase tracking-[0.2em]">Active Question</span>
+                        <p id="question-text" class="text-2xl font-medium leading-relaxed text-white mt-2">Loading...</p>
+                    </div>
+                    <div class="relative group">
+                        <textarea id="user-answer" class="w-full h-80 bg-slate-900/40 border border-slate-800 rounded-3xl p-8 outline-none text-lg text-slate-300 placeholder-slate-700 focus:border-blue-500/50 transition-all" placeholder="Your voice transcript will appear here..."></textarea>
+                        <div class="absolute bottom-6 right-6 flex gap-3">
+                            <button id="mic-btn" class="p-4 bg-slate-800 hover:bg-slate-700 rounded-2xl border border-slate-700 transition-all">
+                                <i data-lucide="mic" id="mic-icon" class="w-6 h-6 text-blue-400"></i>
+                            </button>
+                            <button id="submit-btn" class="bg-blue-600 hover:bg-blue-500 px-10 py-4 rounded-2xl font-bold transition-all shadow-xl shadow-blue-600/20 flex items-center gap-2">
+                                <span>Analyze</span> <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="lg:col-span-5">
+                    <div id="results-panel" class="hidden glass p-8 rounded-3xl h-full border-emerald-500/10">
+                        <h2 class="text-emerald-400 font-black text-[10px] uppercase tracking-widest mb-6">AI Instant Feedback</h2>
+                        <div class="grid grid-cols-2 gap-4 mb-6" id="scores-container"></div>
+                        <div class="p-5 bg-slate-900/60 rounded-2xl border border-slate-800/50 mb-6">
+                            <p id="feedback-text" class="text-sm text-slate-400 leading-relaxed italic"></p>
+                        </div>
+                        <div id="suggestions-list" class="space-y-3"></div>
+                    </div>
+                    <div id="placeholder" class="h-full glass rounded-3xl flex flex-col items-center justify-center opacity-30 border-dashed border-2">
+                        <i data-lucide="zap" class="w-12 h-12 mb-4"></i>
+                        <p class="text-sm">Speak to generate real-time metrics</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="report-screen" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-6">
+            <div class="glass max-w-4xl w-full p-10 rounded-[3rem] shadow-2xl relative overflow-hidden">
+                <button onclick="location.reload()" class="absolute top-8 right-8 text-slate-500 hover:text-white"><i data-lucide="x"></i></button>
+                <div class="text-center mb-10">
+                    <h2 class="text-4xl font-black text-white mb-2">Session Summary</h2>
+                    <p class="text-slate-500">Comprehensive performance analysis across all attempted questions.</p>
+                </div>
+                <div class="grid md:grid-cols-2 gap-10 items-center">
+                    <div class="w-full aspect-square bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+                        <canvas id="performanceChart"></canvas>
+                    </div>
+                    <div class="space-y-6">
+                        <div class="p-6 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
+                            <h4 class="text-blue-400 font-bold mb-1">Strongest Area</h4>
+                            <p id="strong-area" class="text-white font-medium">-</p>
+                        </div>
+                        <div class="p-6 bg-orange-500/10 border border-orange-500/20 rounded-2xl">
+                            <h4 class="text-orange-400 font-bold mb-1">Improvement Needed</h4>
+                            <p id="weak-area" class="text-white font-medium">-</p>
+                        </div>
+                        <button onclick="window.print()" class="w-full py-4 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold transition-all border border-slate-700">Download PDF Report</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="assets/js/main.js"></script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
