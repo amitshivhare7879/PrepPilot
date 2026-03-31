@@ -1,6 +1,11 @@
 from pydantic import BaseModel
 from typing import List
 
+class DSMetrics(BaseModel):
+    total_fillers: int
+    wpm: int
+    pace_status: str
+
 class EvaluationResponse(BaseModel):
     relevance: int
     technical: int
@@ -8,9 +13,5 @@ class EvaluationResponse(BaseModel):
     star_method: int
     feedback: str
     suggestions: List[str]
-
-class InterviewRequest(BaseModel):
-    role: str
-    difficulty: str
-    question: str
-    user_answer: str
+    # Add the DS Differentiator here!
+    speech_metrics: Optional[DSMetrics] = None
