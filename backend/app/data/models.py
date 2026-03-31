@@ -1,6 +1,16 @@
-from sqlalchemy import Column, Integer, String, JSON, DateTime
+from sqlalchemy import Column, Integer, String, JSON, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from .database import Base  # This pulls 'Base' from database.py in the same folder
+from .database import Base
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    
+    sessions = relationship("InterviewSession", back_populates="owner")
 
 class InterviewSession(Base):
     """
@@ -9,16 +19,11 @@ class InterviewSession(Base):
     """
     __tablename__ = "interview_sessions"
 
-    # 1. Primary Key
     id = Column(Integer, primary_key=True, index=True)
-
-    # 2. Interview Context
+    user_id = Column(Integer, ForeignKey("users.id"))
     role = Column(String, index=True)      # e.g., 'Data Scientist'
     difficulty = Column(String)            # e.g., 'Hard'
-
-    # 3. The "AI Goldmine" (JSON Data)
-    # This stores scores, feedback, suggestions, and DS speech metrics
     evaluation_metadata = Column(JSON)
-
-    # 4. Automation
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
+
+    owner = relationship("User", back_populates="sessions")
