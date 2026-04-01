@@ -25,10 +25,17 @@ except ImportError:
 # 3. Initialize the FastAPI app
 app = FastAPI(title="PrepPilot AI Backend - Groq Edition")
 
-# 4. Configure CORS: Allows your Frontend to talk to this API
+# 4. Configure CORS: Explicitly allow your Frontend ports
+origins = [
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=origins, 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

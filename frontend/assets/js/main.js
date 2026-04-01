@@ -12,8 +12,34 @@ const setupScreen = document.getElementById('setup-screen');
 const interviewRoom = document.getElementById('interview-room');
 const reportScreen = document.getElementById('report-screen');
 
-// Auth logic
+// Landing & Auth Logic
 const loginBtn = document.getElementById('login-btn');
+const getStartedBtn = document.getElementById('get-started-btn');
+const showLoginBtn = document.getElementById('show-login-btn');
+const backToLanding = document.getElementById('back-to-landing');
+const landingPage = document.getElementById('landing-page');
+const landingBlobs = document.getElementById('landing-blobs');
+const appVisuals = document.getElementById('app-visuals');
+
+getStartedBtn.onclick = () => {
+    isSignUpMode = true;
+    toggleAuth(true);
+};
+
+showLoginBtn.onclick = () => {
+    isSignUpMode = false;
+    toggleAuth(true);
+};
+
+backToLanding.onclick = () => toggleAuth(false);
+
+function toggleAuth(show) {
+    landingPage.classList.toggle('hidden', show);
+    authScreen.classList.toggle('hidden', !show);
+    loginBtn.innerText = isSignUpMode ? "Create Career Account" : "Sign In";
+    document.querySelector('#auth-screen h2').innerText = isSignUpMode ? "Join the Fleet" : "Welcome Back";
+}
+
 const signUpToggle = document.getElementById('signup-toggle');
 let isSignUpMode = false;
 
@@ -29,7 +55,11 @@ loginBtn.onclick = async () => {
     const pass = document.getElementById('password-input').value;
     if (!email || !pass) return alert("Enter your credentials to continue");
 
-    loginBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin"></i>`;
+    loginBtn.innerHTML = `
+        <div class="btn-loading">
+            <span class="loading-ping"><span></span><span></span></span>
+            <span class="loading-text">Auth Stream...</span>
+        </div>`;
     lucide.createIcons();
 
     try {
@@ -40,10 +70,12 @@ loginBtn.onclick = async () => {
             signUpToggle.click(); // Switch back to login mode
         } else {
             const data = await login(email, pass);
-            currentUserId = data.user_id; // Capture for the entire session
+            currentUserId = data.user_id; 
+            
+            landingPage.classList.add('hidden');
             authScreen.classList.add('hidden');
             setupScreen.classList.remove('hidden');
-            loadDashboard(); // Refresh history
+            loadDashboard(); 
         }
     } catch (e) {
         alert(e.message);
@@ -57,6 +89,47 @@ let userRole, userLevel, currentUserId, isRecording = false;
 let sessionScores = { technical: [], relevance: [], communication: [], star: [] };
 let sessionTranscript = []; 
 let currentShuffledBank = [];
+
+// Custom Dropdown Logic
+function setupCustomDropdown(triggerId, listId, labelId, selectId) {
+    const trigger = document.getElementById(triggerId);
+    const list = document.getElementById(listId);
+    const label = document.getElementById(labelId);
+    const select = document.getElementById(selectId);
+    const options = list.querySelectorAll('.custom-option');
+
+    trigger.onclick = (e) => {
+        e.stopPropagation();
+        const isOpen = !list.classList.contains('hidden');
+        closeAllDropdowns();
+        if (!isOpen) {
+            list.classList.remove('hidden');
+            trigger.classList.add('trigger-active');
+        }
+    };
+
+    options.forEach(opt => {
+        opt.onclick = () => {
+            const val = opt.getAttribute('data-value');
+            label.innerText = val;
+            select.value = val;
+            options.forEach(o => o.classList.remove('selected'));
+            opt.classList.add('selected');
+            list.classList.add('hidden');
+            trigger.classList.remove('trigger-active');
+        };
+    });
+}
+
+function closeAllDropdowns() {
+    document.querySelectorAll('.custom-dropdown-list').forEach(l => l.classList.add('hidden'));
+    document.querySelectorAll('[id$="-trigger"]').forEach(t => t.classList.remove('trigger-active'));
+}
+
+document.addEventListener('click', closeAllDropdowns);
+
+setupCustomDropdown('role-trigger', 'role-list', 'role-label', 'role-select');
+setupCustomDropdown('level-trigger', 'level-list', 'level-label', 'level-select');
 
 async function loadDashboard() {
     if (!currentUserId) return;
@@ -100,7 +173,11 @@ startBtn.onclick = async () => {
     userLevel = document.getElementById('level-select').value;
     document.getElementById('current-role-display').innerText = `${userRole} • ${userLevel}`;
     
-    startBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>`;
+    startBtn.innerHTML = `
+        <div class="btn-loading">
+            <span class="loading-ping"><span></span><span></span></span>
+             <span class="loading-text">Calibrating AI...</span>
+        </div>`;
     lucide.createIcons();
 
     sessionAskedQuestions = [];
@@ -123,39 +200,70 @@ startBtn.onclick = async () => {
 
 // Mic Toggle
 micBtn.onclick = () => {
+    const visualizer = document.getElementById('visualizer');
+    const bars = visualizer.querySelectorAll('.wave-bar');
+
     if (!isRecording) {
         voice.start();
         micBtn.classList.add('pulse-red');
+        visualizer.classList.add('active');
+        bars.forEach(b => b.classList.add('active'));
+        document.getElementById('favicon').href = "https://cdn-icons-png.flaticon.com/512/3294/3294242.png"; // Active Listening mode
     } else {
         voice.stop();
         micBtn.classList.remove('pulse-red');
+        visualizer.classList.remove('active');
+        bars.forEach(b => b.classList.remove('active'));
+        document.getElementById('favicon').href = "https://cdn-icons-png.flaticon.com/512/2103/2103823.png"; // Idle mode
     }
     isRecording = !isRecording;
 };
 
 // Analyze Answer
 submitBtn.onclick = async () => {
-    const answer = answerArea.value;
+    const answer = answerArea.value.trim();
     const currentQ = document.getElementById('question-text').innerText;
     if (!answer) return alert("Please provide an answer.");
     
-    submitBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin"></i>`;
-    lucide.createIcons();
+    const chatContainer = document.getElementById('chat-container');
+    const thinkingBubble = document.getElementById('thinking-bubble');
 
     try {
+        // Show User Bubble in Chat
+        const template = document.getElementById('user-bubble-template');
+        const userBubble = template.cloneNode(true);
+        userBubble.id = ""; 
+        userBubble.classList.remove('hidden');
+        userBubble.querySelector('.user-text').innerText = answer;
+        chatContainer.appendChild(userBubble);
+        scrollToBottom();
+
+        // Clear Input immediately
+        answerArea.value = "";
+        
+        // Show Thinking Bubble
+        chatContainer.appendChild(thinkingBubble);
+        thinkingBubble.classList.remove('hidden');
+        scrollToBottom();
+
+        // Disable Send to prevent spam
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-50');
+
         const data = await sendToAI(answer, currentQ, userRole, userLevel, currentUserId);
         
-        // Track transcript for download
+        // Hide Thinking Bubble
+        thinkingBubble.classList.add('hidden');
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-50');
+
         sessionTranscript.push({ question: currentQ, answer: answer, feedback: data.feedback, scores: data });
 
-        // Track scores for Radar Chart
-        sessionScores.technical.push(data.technical);
-        sessionScores.relevance.push(data.relevance);
-        sessionScores.communication.push(data.communication);
-        sessionScores.star.push(data.star_method);
-
+        // Update Radar and Render
+        const scores = [data.technical, data.soft_skills, data.role_fit, data.structure];
+        radarChart.data.datasets[0].data = scores;
+        radarChart.update();
         renderResults(data);
-        submitBtn.classList.add('hidden'); // Hide analyze after submission
     } catch (e) {
         alert("Check if Backend is on Port 8001");
     } finally {
@@ -171,7 +279,8 @@ const nextBtn = document.getElementById('next-btn');
 nextBtn.onclick = async () => {
     answerArea.value = "";
     document.getElementById('results-panel').classList.add('hidden');
-    document.getElementById('placeholder').classList.remove('hidden');
+    // Remove previous user bubbles to keep chat clean for next question or keep them for history?
+    // Let's keep them and scroll.
     submitBtn.classList.remove('hidden');
 
     nextBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>`;
@@ -188,6 +297,7 @@ nextBtn.onclick = async () => {
         const { question } = await getNextQuestion(userRole, userLevel, sessionAskedQuestions);
         sessionAskedQuestions.push(question);
         document.getElementById('question-text').innerText = question;
+        scrollToBottom();
     } catch (e) {
         alert("Session interrupted. Check connection.");
     } finally {
@@ -302,9 +412,19 @@ finishBtn.onclick = () => {
     lucide.createIcons();
 };
 
+function scrollToBottom() {
+    const container = document.getElementById('chat-container');
+    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+}
+
 function renderResults(data) {
-    document.getElementById('placeholder').classList.add('hidden');
-    document.getElementById('results-panel').classList.remove('hidden');
+    const resultsPanel = document.getElementById('results-panel');
+    const chatContainer = document.getElementById('chat-container');
+    
+    // Move results panel to the end of the current chat
+    chatContainer.appendChild(resultsPanel);
+    resultsPanel.classList.remove('hidden');
+    scrollToBottom();
     
     const stats = [
         { l: "Knowledge", v: data.technical, c: "text-blue-400" },
