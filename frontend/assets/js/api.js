@@ -1,4 +1,10 @@
-const API_URL = 'http://127.0.0.1:8001/api';
+// Production backend URL (set this after your Render deployment)
+const PROD_URL = 'https://preppilot-backend.onrender.com/api'; // Replace this
+const LOCAL_URL = 'http://127.0.0.1:8001/api';
+
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+    ? LOCAL_URL 
+    : PROD_URL;
 
 export async function login(email, password) {
     const response = await fetch(`${API_URL}/login`, {
