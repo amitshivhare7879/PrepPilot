@@ -40,3 +40,9 @@ class UserLogin(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class SessionCreate(BaseModel):
+    user_id: int
+    role: str
+    difficulty: str
+    evaluation_metadata: dict

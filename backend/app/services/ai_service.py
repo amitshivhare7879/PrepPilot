@@ -20,7 +20,19 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 AI_PROVIDER = os.getenv("AI_PROVIDER", "groq")
 
 async def generate_ai_question(role: str, difficulty: str, history: List[str] = []):
-    prompt = f"As an interviewer, ask ONE unique {difficulty} technical question for a {role}. Avoid these already asked: {', '.join(history)}. Return JSON: {{\"question\": \"...\"}}"
+    prompt = f"""
+    You are an expert technical interviewer for a {role} position.
+    Ask ONE unique {difficulty} level interview question.
+    
+    GUIDELINES:
+    - If difficulty is "Entry Level", focus more on core definitions, fundamental concepts, and common use cases.
+    - If difficulty is "Mid Level" or "Senior", focus on practical scenarios, edge cases, and high-level architectural trade-offs.
+    - Keep it conversational and professional (not like a rigid exam).
+    - Ensure it can be answered clearly in 1-2 minutes via voice or text.
+    - Avoid these questions which were already asked: {', '.join(history)}
+    
+    Return JSON only: {{"question": "The question text"}}
+    """
     
     try:
         if AI_PROVIDER == "groq":
@@ -39,21 +51,27 @@ async def generate_ai_question(role: str, difficulty: str, history: List[str] = 
 
 async def get_ai_evaluation(question: str, answer: str, role: str, difficulty: str):
     prompt = f"""
-    Evaluate this interview response.
+    Evaluate this {role} interview response.
     Question: {question}
     Answer: {answer}
-    Role: {role} ({difficulty})
+    Level: {difficulty}
     
-    Return JSON ONLY with these EXACT keys:
+    SCORING RUBRIC (0-100):
+    - technical: Core domain knowledge, precision, and accuracy. Award high marks for specific examples/details. (0 if nonsense/empty, 100 if expert).
+    - relevance: How directly they answered every part of the question.
+    - communication: Professional tone, clarity, and concise delivery.
+    - star_method: Logical structure (Situation, Task, Action, Result).
+    
+    Return JSON only with these EXACT keys:
     {{
-      "relevance": 0-100, 
-      "technical": 0-100, 
-      "communication": 0-100, 
-      "star_method": 0-100,
-      "feedback": "string", 
-      "suggestions": ["list"], 
-      "ideal_answer": "string",
-      "learning_topics": ["list"]
+      "relevance": int, 
+      "technical": int, 
+      "communication": int, 
+      "star_method": int,
+      "feedback": "Conversational yet rigorous technical feedback (one concise paragraph). Be fair—don't give 0 if they mentioned correct concepts.", 
+      "suggestions": ["3 actionable technical improvement points"], 
+      "ideal_answer": "A technical, role-specific benchmark answer",
+      "learning_topics": ["2-3 focused topics for deep-dive study"]
     }}
     """
     try:

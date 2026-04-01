@@ -1,5 +1,9 @@
-import { VoiceHandler } from './recorder.js';
-import { sendToAI, login, signup, fetchHistory, getNextQuestion } from './api.js';
+import VoiceRecorder from './recorder.js';
+import { sendToAI, login, signup, fetchHistory, getNextQuestion, saveSession } from './api.js';
+
+const voice = new VoiceRecorder((text) => {
+    document.getElementById('user-answer').value = text;
+});
 
 // Elements
 const startBtn = document.getElementById('start-btn');
@@ -7,6 +11,16 @@ const finishBtn = document.getElementById('finish-btn');
 const micBtn = document.getElementById('mic-btn');
 const submitBtn = document.getElementById('submit-btn');
 const answerArea = document.getElementById('user-answer');
+
+// Handle Enter to submit
+if (answerArea) {
+    answerArea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            submitBtn.click();
+        }
+    });
+}
 const authScreen = document.getElementById('auth-screen');
 const setupScreen = document.getElementById('setup-screen');
 const interviewRoom = document.getElementById('interview-room');
@@ -55,10 +69,11 @@ loginBtn.onclick = async () => {
     const pass = document.getElementById('password-input').value;
     if (!email || !pass) return alert("Enter your credentials to continue");
 
+    loginBtn.disabled = true;
     loginBtn.innerHTML = `
         <div class="btn-loading">
             <span class="loading-ping"><span></span><span></span></span>
-            <span class="loading-text">Auth Stream...</span>
+            <span class="loading-text">Authenticating...</span>
         </div>`;
     lucide.createIcons();
 
@@ -80,6 +95,7 @@ loginBtn.onclick = async () => {
     } catch (e) {
         alert(e.message);
     } finally {
+        loginBtn.disabled = false;
         loginBtn.innerText = isSignUpMode ? "Create Career Account" : "Sign In";
         lucide.createIcons();
     }
@@ -89,6 +105,7 @@ let userRole, userLevel, currentUserId, isRecording = false;
 let sessionScores = { technical: [], relevance: [], communication: [], star: [] };
 let sessionTranscript = []; 
 let currentShuffledBank = [];
+let radarChart = null; // Fix for ReferenceError
 
 // Custom Dropdown Logic
 function setupCustomDropdown(triggerId, listId, labelId, selectId) {
@@ -165,7 +182,6 @@ const questions = {
     "Data Analyst": "Describe a time you used data to influence a business decision."
 };
 
-const voice = new VoiceHandler((text) => { answerArea.value = text; });
 
 // Start Session
 startBtn.onclick = async () => {
@@ -185,89 +201,156 @@ startBtn.onclick = async () => {
     sessionScores = { technical: [], relevance: [], communication: [], star: [] };
 
     try {
-        const { question } = await getNextQuestion(userRole, userLevel, []);
-        sessionAskedQuestions.push(question);
-        document.getElementById('question-text').innerText = question;
+        const data = await getNextQuestion(userRole, userLevel, []);
+        const questionText = typeof data.question === 'object' ? data.question.text || data.question.question : data.question;
+        
+        sessionAskedQuestions.push(questionText);
+        
+        const resultsPanel = document.getElementById('results-panel');
+        if (resultsPanel) {
+            resultsPanel.classList.add('hidden');
+            document.body.appendChild(resultsPanel); // Safely store it before clearing
+        }
+        
+        // CLEAR CHAT AND START
+        chatContainer.innerHTML = '';
+        addAIBubble(questionText);
+        
         setupScreen.classList.add('hidden');
         interviewRoom.classList.remove('hidden');
     } catch (e) {
         alert("Failed to start session. Is backend running?");
     } finally {
         startBtn.innerHTML = `<span>Start Calibration</span> <i data-lucide="rocket" class="w-4 h-4"></i>`;
+        
+        // INITIALIZE CHART
+        const ctx = document.getElementById('cockpit-stats-chart');
+        if (ctx && !radarChart) {
+            radarChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ["Knowledge", "Role Fit", "Soft Skills", "Structure"],
+                    datasets: [{
+                        label: 'Real-time Metrics',
+                        data: [0, 0, 0, 0],
+                        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                        borderColor: 'rgba(99, 102, 241, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: { scales: { r: { beginAtZero: true, max: 100 } } }
+            });
+        }
         lucide.createIcons();
     }
 };
 
 // Mic Toggle
 micBtn.onclick = () => {
-    const visualizer = document.getElementById('visualizer');
-    const bars = visualizer.querySelectorAll('.wave-bar');
+    // 1. Initial State Toggle
+    isRecording = !isRecording;
+    
+    // 2. SAFETY ENGINE CHECK
+    if (!voice) return console.error("Voice Engine offline. Check recorder.js");
 
-    if (!isRecording) {
+    // 3. UI FEEDBACK (Pulse)
+    micBtn.classList.toggle('pulse-red', isRecording);
+    
+    if (isRecording) {
         voice.start();
-        micBtn.classList.add('pulse-red');
-        visualizer.classList.add('active');
-        bars.forEach(b => b.classList.add('active'));
-        document.getElementById('favicon').href = "https://cdn-icons-png.flaticon.com/512/3294/3294242.png"; // Active Listening mode
+        micBtn.innerHTML = `<i data-lucide="mic-off" class="w-6 h-6"></i>`;
     } else {
         voice.stop();
-        micBtn.classList.remove('pulse-red');
-        visualizer.classList.remove('active');
-        bars.forEach(b => b.classList.remove('active'));
-        document.getElementById('favicon').href = "https://cdn-icons-png.flaticon.com/512/2103/2103823.png"; // Idle mode
+        micBtn.innerHTML = `<i data-lucide="mic" class="w-6 h-6"></i>`;
     }
-    isRecording = !isRecording;
+
+    // 4. OPTIONAL VISUALIZER (Only if exists)
+    const visualizer = document.getElementById('visualizer');
+    if (visualizer) {
+        visualizer.classList.toggle('active', isRecording);
+        const bars = visualizer.querySelectorAll('.wave-bar');
+        bars.forEach(b => b.classList.toggle('active', isRecording));
+    }
+
+    lucide.createIcons();
 };
 
-// Analyze Answer
+// Analyze Answer (Submits and turns off mic)
 submitBtn.onclick = async () => {
+    // 1. FORCIBLY STOP MIC IF ON
+    if (isRecording) {
+        voice.stop();
+        isRecording = false;
+        micBtn.classList.remove('pulse-red');
+        micBtn.innerHTML = `<i data-lucide="mic" class="w-6 h-6"></i>`;
+    }
+
     const answer = answerArea.value.trim();
-    const currentQ = document.getElementById('question-text').innerText;
     if (!answer) return alert("Please provide an answer.");
+
+    // EXPLICIT CLEAR (Instant feedback)
+    answerArea.value = "";
+    voice.reset();
+
+    addUserBubble(answer);
     
-    const chatContainer = document.getElementById('chat-container');
-    const thinkingBubble = document.getElementById('thinking-bubble');
+    // Last Question Text (for Evaluation) should be the last AI bubble
+    const currentQ = sessionAskedQuestions[sessionAskedQuestions.length - 1];
+    
+    // Add Dynamic Thinking Bubble
+    const thinking = document.createElement('div');
+    thinking.id = "ai-thinking-bubble";
+    thinking.className = "flex items-center gap-2 text-indigo-400 text-sm mt-2 font-medium bg-indigo-50/50 p-4 rounded-2xl w-fit";
+    thinking.innerHTML = `<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i> PrepPilot is evaluating...`;
+    chatContainer.appendChild(thinking);
+    scrollToBottom();
 
     try {
-        // Show User Bubble in Chat
-        const template = document.getElementById('user-bubble-template');
-        const userBubble = template.cloneNode(true);
-        userBubble.id = ""; 
-        userBubble.classList.remove('hidden');
-        userBubble.querySelector('.user-text').innerText = answer;
-        chatContainer.appendChild(userBubble);
-        scrollToBottom();
-
         // Clear Input immediately
         answerArea.value = "";
+        voice.reset();
         
-        // Show Thinking Bubble
-        chatContainer.appendChild(thinkingBubble);
-        thinkingBubble.classList.remove('hidden');
-        scrollToBottom();
-
         // Disable Send to prevent spam
         submitBtn.disabled = true;
         submitBtn.classList.add('opacity-50');
 
-        const data = await sendToAI(answer, currentQ, userRole, userLevel, currentUserId);
+        const data = await sendToAI(userRole, userLevel, currentQ, answer, currentUserId);
         
         // Hide Thinking Bubble
-        thinkingBubble.classList.add('hidden');
+        thinking.remove();
         submitBtn.disabled = false;
         submitBtn.classList.remove('opacity-50');
 
         sessionTranscript.push({ question: currentQ, answer: answer, feedback: data.feedback, scores: data });
 
-        // Update Radar and Render
-        const scores = [data.technical, data.soft_skills, data.role_fit, data.structure];
-        radarChart.data.datasets[0].data = scores;
-        radarChart.update();
+        // Update Session Aggregates (Crucial for Summary Chart)
+        sessionScores.technical.push(data.technical);
+        sessionScores.relevance.push(data.relevance);
+        sessionScores.communication.push(data.communication);
+        sessionScores.star.push(data.star_method);
+
+        // Update Live Cockpit Stats (Only if exists)
+        if (radarChart) {
+            radarChart.data.datasets[0].data = [
+                data.technical, 
+                data.relevance, 
+                data.communication, 
+                data.star_method
+            ];
+            radarChart.update();
+        }
+        
         renderResults(data);
     } catch (e) {
-        alert("Check if Backend is on Port 8001");
-    } finally {
-        submitBtn.innerHTML = `<span>Analyze</span> <i data-lucide="arrow-right" class="w-4 h-4"></i>`;
+        console.error("Evaluation Error:", e);
+        alert(`Error: ${e.message || "The AI is currently processing. Please try again."}`);
+        
+        // Remove thinking bubble on failure
+        const thinkingBubble = document.getElementById('ai-thinking-bubble');
+        if (thinkingBubble) thinkingBubble.remove();
+        
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<span>Analyze Answer</span> <i data-lucide="send" class="w-4 h-4"></i>`;
         lucide.createIcons();
     }
 };
@@ -275,16 +358,18 @@ submitBtn.onclick = async () => {
 let sessionAskedQuestions = [];
 
 // Next Question logic
-const nextBtn = document.getElementById('next-btn');
-nextBtn.onclick = async () => {
-    answerArea.value = "";
-    document.getElementById('results-panel').classList.add('hidden');
-    // Remove previous user bubbles to keep chat clean for next question or keep them for history?
-    // Let's keep them and scroll.
-    submitBtn.classList.remove('hidden');
-
-    nextBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>`;
-    lucide.createIcons();
+const nextBtn = document.getElementById('next-question-btn');
+if (nextBtn) {
+    nextBtn.onclick = async () => {
+        answerArea.value = "";
+        voice.reset();
+        // Reset thinking and hidden panels
+        const resultsPanel = document.getElementById('results-panel');
+        if (resultsPanel) resultsPanel.classList.add('hidden');
+        
+        submitBtn.classList.remove('hidden');
+        nextBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>`;
+        lucide.createIcons();
 
     try {
         // Limit to 10 questions per session to avoid infinite loops/cost
@@ -294,17 +379,19 @@ nextBtn.onclick = async () => {
             return;
         }
 
-        const { question } = await getNextQuestion(userRole, userLevel, sessionAskedQuestions);
-        sessionAskedQuestions.push(question);
-        document.getElementById('question-text').innerText = question;
-        scrollToBottom();
+        const data = await getNextQuestion(userRole, userLevel, sessionAskedQuestions);
+        const questionText = typeof data.question === 'object' ? data.question.text || data.question.question : data.question;
+        
+        sessionAskedQuestions.push(questionText);
+        addAIBubble(questionText);
     } catch (e) {
         alert("Session interrupted. Check connection.");
-    } finally {
-        nextBtn.innerHTML = `<span>Next Question</span> <i data-lucide="skip-forward" class="w-4 h-4 text-blue-500"></i>`;
-        lucide.createIcons();
-    }
-};
+        } finally {
+            nextBtn.innerHTML = `<span>Next Question</span> <i data-lucide="skip-forward" class="w-4 h-4 text-white"></i>`;
+            lucide.createIcons();
+        }
+    };
+}
 
 async function downloadTranscript() {
     const textData = sessionTranscript.map((t, idx) => `
@@ -371,6 +458,14 @@ finishBtn.onclick = () => {
     const commAvg = avg(sessionScores.communication);
     const starAvg = avg(sessionScores.star);
 
+    // Save metadata for history tracking
+    saveSession(currentUserId, userRole, userLevel, {
+        technical: techAvg,
+        relevance: relAvg,
+        communication: commAvg,
+        star_method: starAvg
+    });
+
     const averages = [
         { name: "Knowledge Polish", value: techAvg },
         { name: "Role Suitability", value: relAvg },
@@ -386,7 +481,7 @@ finishBtn.onclick = () => {
     const scoreVal = avg([techAvg, relAvg, commAvg, starAvg]);
     const rank = scoreVal > 85 ? "Expert Pilot" : (scoreVal > 65 ? "Steady Climber" : "New Recruit");
     document.getElementById('questions-done').innerText = rank;
-    document.querySelector("[for='questions-done-label']").innerText = "Current Ranking";
+    document.getElementById('rank-label').innerText = "Current Ranking";
     
     const ctx = document.getElementById('performanceChart').getContext('2d');
     new Chart(ctx, {
@@ -405,16 +500,103 @@ finishBtn.onclick = () => {
         },
         options: {
             plugins: { legend: { display: false } },
-            scales: { r: { min: 0, max: 100, stepSize: 20, grid: { color: 'rgba(255,255,255,0.05)' }, angleLines: { color: 'rgba(255,255,255,0.05)' }, pointLabels: { color: '#94a3b8', font: { size: 10, weight: 'bold' } }, ticks: { display: false } } }
+            scales: { 
+                r: { 
+                    min: 0, 
+                    max: 100, 
+                    stepSize: 20, 
+                    grid: { color: 'rgba(71, 85, 105, 0.1)' }, // Better contrast for light bg
+                    angleLines: { color: 'rgba(71, 85, 105, 0.1)' },
+                    pointLabels: { 
+                        color: '#475569', 
+                        font: { size: 10, weight: '900' },
+                        padding: 15
+                    }, 
+                    ticks: { display: false } 
+                } 
+            }
         }
     });
+
+    // Learning Topics Rendering
+    const allTopics = sessionTranscript.flatMap(t => t.scores.learning_topics || []);
+    const uniqueTopics = [...new Set(allTopics)].slice(0, 4);
+    
+    document.getElementById('learning-topics-list').innerHTML = uniqueTopics.map(t => `
+        <div class="flex items-center gap-3 text-xs text-slate-600">
+            <i data-lucide="check-circle-2" class="w-3 h-3 text-blue-600"></i>
+            <span class="font-medium">${t}</span>
+        </div>
+    `).join('') || `<p class="text-xs text-slate-400 italic">No specific gaps identified. Excellent work!</p>`;
+
+    // Navigation Wiring (Persistent Session - Null Safe)
+    const returnToBase = () => {
+        reportScreen.classList.add('hidden');
+        setupScreen.classList.remove('hidden');
+        loadDashboard(); 
+    };
+
+    const closeBtn = document.getElementById('close-report-final');
+    if (closeBtn) closeBtn.onclick = returnToBase;
+    
+    const dashBtn = document.getElementById('dashboard-btn');
+    if (dashBtn) dashBtn.onclick = returnToBase;
+
+    const restartBtn = document.getElementById('restart-btn');
+    if (restartBtn) restartBtn.onclick = () => {
+        answerArea.value = "";
+        voice.reset();
+        reportScreen.classList.add('hidden');
+        startBtn.click();
+    };
 
     lucide.createIcons();
 };
 
+const chatContainer = document.getElementById('chat-container');
+
+// Helper: Add AI Question Bubble
+function addAIBubble(text) {
+    const bubble = document.createElement('div');
+    bubble.className = "flex items-start gap-4 reveal mb-6";
+    bubble.innerHTML = `
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 flex-shrink-0 flex items-center justify-center shadow-lg shadow-indigo-600/20">
+            <i data-lucide="bot" class="w-5 h-5 text-indigo-100"></i>
+        </div>
+        <div class="glass p-6 rounded-[2rem] rounded-tl-none border-t border-t-indigo-500/20 max-w-[85%] text-slate-800 leading-relaxed shadow-sm">
+            ${text}
+        </div>
+    `;
+    chatContainer.appendChild(bubble);
+    lucide.createIcons();
+    scrollToBottom();
+}
+
+// Helper: Add User Answer Bubble
+function addUserBubble(text) {
+    const bubble = document.createElement('div');
+    bubble.className = "flex flex-col items-end gap-2 mb-6 reveal self-end w-full";
+    bubble.innerHTML = `
+        <div class="flex items-center gap-2 mb-1 px-2">
+             <span class="text-[10px] uppercase font-black text-indigo-400 tracking-widest">Your Response</span>
+             <div class="w-6 h-6 rounded-lg bg-slate-900 flex items-center justify-center">
+                 <i data-lucide="user" class="w-3 h-3 text-white"></i>
+             </div>
+        </div>
+        <div class="bg-indigo-50 border border-indigo-100 p-5 rounded-[2rem] rounded-tr-none max-w-[75%] shadow-sm">
+            <p class="text-sm italic text-indigo-900 leading-relaxed">${text}</p>
+        </div>
+    `;
+    chatContainer.appendChild(bubble);
+    lucide.createIcons();
+    scrollToBottom();
+}
+
 function scrollToBottom() {
-    const container = document.getElementById('chat-container');
-    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    if (chatContainer) {
+        chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+    }
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 }
 
 function renderResults(data) {
@@ -434,27 +616,37 @@ function renderResults(data) {
     ];
 
     document.getElementById('scores-container').innerHTML = stats.map(s => `
-        <div class="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-            <p class="text-[9px] uppercase font-bold text-slate-500 mb-1">${s.l}</p>
-            <p class="text-xl font-black ${s.c}">${Math.round(s.v)}%</p>
+        <div class="bg-white border-2 border-indigo-50 p-4 rounded-2xl shadow-sm">
+            <p class="text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-widest">${s.l}</p>
+            <p class="text-2xl font-black ${s.c}">${Math.round(s.v)}%</p>
         </div>
     `).join('');
 
-    document.getElementById('feedback-text').innerText = data.feedback;
+    // 4. DISPLAY FEEDBACK RIDICULOUSLY CLEARLY
+    document.getElementById('feedback-text').innerHTML = `
+        <div class="p-6 bg-indigo-50 border border-indigo-100 rounded-2xl italic text-slate-800 leading-relaxed shadow-sm">
+            "${data.feedback}"
+        </div>
+    `;
     
     // Display Ideal Answer
-    const idealBox = document.getElementById('ideal-answer-box');
-    const idealText = document.getElementById('ideal-answer-text');
-    if (data.ideal_answer) {
-        idealBox.classList.remove('hidden');
-        idealText.innerText = data.ideal_answer;
-    }
-
-    document.getElementById('suggestions-list').innerHTML = data.suggestions.map(s => `
-        <div class="flex items-center gap-3 text-xs text-slate-400">
-            <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> <span>${s}</span>
+    document.getElementById('ideal-answer-text').innerHTML = `
+        <div class="p-6 bg-blue-50 border border-blue-100 rounded-2xl text-blue-900 leading-relaxed shadow-sm">
+            <span class="text-[10px] uppercase font-black text-blue-400 mb-2 block tracking-widest">Mastery Benchmark</span>
+            ${data.ideal_answer}
         </div>
-    `).join('');
+    `;
+
+    // 5. Populate Suggestions
+    const suggestionsList = document.getElementById('suggestions-list');
+    if (suggestionsList) {
+        suggestionsList.innerHTML = (data.suggestions || []).map(s => `
+            <div class="flex items-start gap-3 text-sm text-slate-600">
+                <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 mt-1"></i>
+                <span>${s}</span>
+            </div>
+        `).join('');
+    }
     
     lucide.createIcons();
 }

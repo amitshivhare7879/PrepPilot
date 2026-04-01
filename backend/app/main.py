@@ -13,12 +13,12 @@ if current_dir not in sys.path:
 
 try:
     from data import models as db_models, database
-    from models.schemas import InterviewRequest, EvaluationResponse, UserCreate, UserLogin
+    from models.schemas import InterviewRequest, EvaluationResponse, UserCreate, UserLogin, SessionCreate
     from services.ai_service import get_ai_evaluation, generate_ai_question
     from services.nlp_utils import analyze_speech_metrics
 except ImportError:
     from .data import models as db_models, database
-    from .models.schemas import InterviewRequest, EvaluationResponse, UserCreate, UserLogin
+    from .models.schemas import InterviewRequest, EvaluationResponse, UserCreate, UserLogin, SessionCreate
     from .services.ai_service import get_ai_evaluation, generate_ai_question
     from .services.nlp_utils import analyze_speech_metrics
 
@@ -90,3 +90,19 @@ def get_interview_history(user_id: int, db: Session = Depends(database.get_db)):
 @app.post("/api/generate-question")
 async def get_next_question(role: str, difficulty: str, history: List[str] = []):
     return await generate_ai_question(role, difficulty, history)
+
+@app.post("/api/save-session")
+async def save_session(data: SessionCreate, db: Session = Depends(database.get_db)):
+    try:
+        new_session = db_models.InterviewSession(
+            user_id=data.user_id,
+            role=data.role,
+            difficulty=data.difficulty,
+            evaluation_metadata=data.evaluation_metadata
+        )
+        db.add(new_session)
+        db.commit()
+        return {"message": "Session saved successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
