@@ -1,5 +1,5 @@
 // Production backend URL (set this after your Render deployment)
-const PROD_URL = 'https://preppilot-backend.onrender.com/api'; // Replace this
+const PROD_URL = 'https://preppilot-zx7s.onrender.com/api'; 
 const LOCAL_URL = 'http://127.0.0.1:8001/api';
 
 const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
