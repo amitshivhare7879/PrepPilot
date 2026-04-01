@@ -529,11 +529,73 @@ finishBtn.onclick = () => {
         </div>
     `).join('') || `<p class="text-xs text-slate-400 italic">No specific gaps identified. Excellent work!</p>`;
 
-    // Navigation Wiring (Persistent Session - Null Safe)
+    // Populate Detailed Transcript Section
+    const transcriptList = document.getElementById('detailed-session-list');
+    transcriptList.innerHTML = sessionTranscript.map((t, i) => `
+        <div class="p-8 bg-white border border-slate-100 rounded-[2.5rem] shadow-sm space-y-4">
+            <div class="flex items-center gap-2 mb-4">
+                <span class="bg-indigo-600 text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full">Q${i+1}</span>
+                <h5 class="text-indigo-900 font-bold text-sm">${t.question}</h5>
+            </div>
+            
+            <div class="grid md:grid-cols-2 gap-6">
+                <div class="space-y-2">
+                    <p class="text-[10px] uppercase font-black text-indigo-400 tracking-widest">Your Answer</p>
+                    <p class="text-sm text-slate-600 italic bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50">"${t.answer}"</p>
+                </div>
+                <div class="space-y-2">
+                    <p class="text-[10px] uppercase font-black text-emerald-500 tracking-widest">Benchmark Answer</p>
+                    <p class="text-sm text-emerald-900 bg-emerald-50 p-4 rounded-2xl border border-emerald-100">"${t.scores.ideal_answer || 'Expert analysis pending.'}"</p>
+                </div>
+            </div>
+            
+            <div class="mt-4 p-4 bg-amber-50 rounded-2xl border border-amber-100/50">
+                <p class="text-[10px] uppercase font-black text-amber-600 tracking-widest mb-1">Key Feedback</p>
+                <p class="text-xs text-amber-800">${t.feedback}</p>
+            </div>
+        </div>
+    `).join('');
+
+    // Final Summary Paragraph (Dynamic)
+    const finalScoreValue = Math.round(avg([techAvg, relAvg, commAvg, starAvg]));
+    const summaryPara = document.getElementById('final-summary-paragraph');
+    summaryPara.innerHTML = `
+        <strong class="text-indigo-900 block mb-2 uppercase tracking-widest text-[10px] font-black">Final Career Architect Review:</strong>
+        Based on our current simulation for the <span class="font-bold text-indigo-600">${userRole}</span> position, you've demonstrated a global proficiency of <span class="font-bold text-indigo-600">${finalScoreValue}%</span>. 
+        Your strongest asset currently lies in <span class="font-bold text-indigo-600">${averages[0].name}</span>, but to transition into a top-tier role, our analysis suggests prioritizing 
+        <span class="font-bold text-rose-600">${averages[averages.length-1].name}</span> and deep-diving into <span class="font-medium">${uniqueTopics.join(', ') || 'foundational core concepts'}</span>. 
+        Overall, your performance classifies you as a <span class="font-black text-indigo-900 underline decoration-indigo-200 decoration-4">${rank}</span>.
+    `;
+
+    // Navigation Wiring
     const returnToBase = () => {
         reportScreen.classList.add('hidden');
         setupScreen.classList.remove('hidden');
         loadDashboard(); 
+    };
+
+    const downloadBtn = document.getElementById('download-report-btn');
+    if (downloadBtn) downloadBtn.onclick = () => {
+        let reportText = `PrepPilot Interview Report\n`;
+        reportText += `Role: ${userRole}\nDifficulty: ${userLevel}\n`;
+        reportText += `Global Score: ${finalScoreValue}%\nRanking: ${rank}\n\n`;
+        reportText += `--- DETAILED TRANSCRIPT ---\n\n`;
+        
+        sessionTranscript.forEach((t, i) => {
+            reportText += `Q${i+1}: ${t.question}\n`;
+            reportText += `Your Ans: ${t.answer}\n`;
+            reportText += `Ideal Ans: ${t.scores.ideal_answer}\n`;
+            reportText += `Feedback: ${t.feedback}\n\n`;
+        });
+        
+        const blob = new Blob([reportText], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `PrepPilot_Report_${new Date().toISOString().slice(0,10)}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
     };
 
     const closeBtn = document.getElementById('close-report-final');
